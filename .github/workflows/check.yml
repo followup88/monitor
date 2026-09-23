@@ -1,0 +1,44 @@
+name: Instagram Check
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore Instagram session
+        env:
+          IG_SESSION_B64: ${{ secrets.IG_SESSION_B64 }}
+          IG_USERNAME: ${{ secrets.IG_USERNAME }}
+        run: |
+          mkdir -p ~/.config/instaloader
+          echo "$IG_SESSION_B64" | base64 -d > ~/.config/instaloader/session-$IG_USERNAME
+
+      - name: Check accounts
+        env:
+          IG_USERNAME: ${{ secrets.IG_USERNAME }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python check_posts.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state.json posts.json
+          git diff --quiet --cached || git commit -m "Update post state"
+          git push
